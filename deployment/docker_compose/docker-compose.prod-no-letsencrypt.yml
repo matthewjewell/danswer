@@ -180,7 +180,7 @@ services:
       - api_server
       - web_server
     ports:
-      - "80:80"
+      # - "80:80"
       - "443:443"
     volumes:
       - ../data/nginx:/etc/nginx/conf.d

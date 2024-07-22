@@ -385,7 +385,9 @@ export function processRawChatHistory(
       message: messageInfo.message,
       type: messageInfo.message_type as "user" | "assistant",
       files: messageInfo.files,
-      alternateAssistantID: Number(messageInfo.alternate_assistant_id),
+      alternateAssistantID: messageInfo.alternate_assistant_id
+        ? Number(messageInfo.alternate_assistant_id)
+        : null,
       // only include these fields if this is an assistant message so that
       // this is identical to what is computed at streaming time
       ...(messageInfo.message_type === "assistant"
@@ -503,7 +505,7 @@ export function removeMessage(
 
 export function checkAnyAssistantHasSearch(
   messageHistory: Message[],
-  availablePersonas: Persona[],
+  availableAssistants: Persona[],
   livePersona: Persona
 ): boolean {
   const response =
@@ -514,11 +516,9 @@ export function checkAnyAssistantHasSearch(
       ) {
         return false;
       }
-
-      const alternateAssistant = availablePersonas.find(
-        (persona) => persona.id === message.alternateAssistantID
+      const alternateAssistant = availableAssistants.find(
+        (assistant) => assistant.id === message.alternateAssistantID
       );
-
       return alternateAssistant
         ? personaIncludesRetrieval(alternateAssistant)
         : false;
@@ -528,7 +528,11 @@ export function checkAnyAssistantHasSearch(
 }
 
 export function personaIncludesRetrieval(selectedPersona: Persona) {
-  return selectedPersona.num_chunks !== 0;
+  return selectedPersona.tools.some(
+    (tool) =>
+      tool.in_code_tool_id &&
+      ["SearchTool", "InternetSearchTool"].includes(tool.in_code_tool_id)
+  );
 }
 
 const PARAMS_TO_SKIP = [
@@ -543,11 +547,16 @@ const PARAMS_TO_SKIP = [
 export function buildChatUrl(
   existingSearchParams: ReadonlyURLSearchParams,
   chatSessionId: number | null,
-  personaId: number | null
+  personaId: number | null,
+  search?: boolean
 ) {
   const finalSearchParams: string[] = [];
   if (chatSessionId) {
-    finalSearchParams.push(`${SEARCH_PARAM_NAMES.CHAT_ID}=${chatSessionId}`);
+    finalSearchParams.push(
+      `${
+        search ? SEARCH_PARAM_NAMES.SEARCH_ID : SEARCH_PARAM_NAMES.CHAT_ID
+      }=${chatSessionId}`
+    );
   }
   if (personaId !== null) {
     finalSearchParams.push(`${SEARCH_PARAM_NAMES.PERSONA_ID}=${personaId}`);
@@ -561,10 +570,10 @@ export function buildChatUrl(
   const finalSearchParamsString = finalSearchParams.join("&");
 
   if (finalSearchParamsString) {
-    return `/chat?${finalSearchParamsString}`;
+    return `/${search ? "search" : "chat"}?${finalSearchParamsString}`;
   }
 
-  return "/chat";
+  return `/${search ? "search" : "chat"}`;
 }
 
 export async function uploadFilesForChat(
